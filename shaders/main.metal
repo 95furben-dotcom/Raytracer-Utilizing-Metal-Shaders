@@ -47,6 +47,7 @@ fragment float4 fragment_main(
         if(!spheres[0].inited){
             return float4(1,1,0,1); // yellow error
         }
+        
     // Build a simple camera ray from UV and camera params
     float3 forward = (camera.forward);
     float3 right = (camera.right);

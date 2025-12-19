@@ -78,34 +78,20 @@ void runEventLoop(NSApplication* app, MTKView* metalView, WindowDelegate* delega
     }
 }
 
-void initWorldInfo() {
-    uint sphereCount = 2;
-    worldInfo.world = World(sphereCount, 0);
-
-    worldInfo.camera = Camera(
-        simd_float3{0,0,-10},
-        simd_float3{0,0,-1},
-        simd_float3{0,1,0}
-    );
-
-    /*
-    Sphere(simd_float3 c,
-           float r = 5.0f,
-           simd_float3 color = {1.0f, 1.0f, 1.0f},
-           float roughness = 0.5f,
-           float emission = 0.0f)
-    {
-    */
-
-    worldInfo.spheres[0] = Sphere(
-        simd_float3{0,0,0}, 5.0f,
-        simd_float3{1,0,0}, 0.5f, 0.0f
-    );
-
-    worldInfo.spheres[1] = Sphere(
-        simd_float3{3,3,-3}, 1.0f,
-        simd_float3{0,0,1}, 0.5f, 1.0f
-    );
+bool initWorldInfo() {
+    char* path = "Settings/scene.json";
+    // load settings
+    if (!loadSceneText(path, worldInfo)) {
+        NSLog(@"No scene file found, using default");
+        bool defaultSceneLoadSucsess = loadSceneText("Settings/default_scene.json", worldInfo);
+        if(!defaultSceneLoadSucsess){
+            NSLog(@"failed to load default scene");
+            return NO;
+        }
+        // Optionally save the default scene
+        saveSceneText(path, worldInfo);
+    }
+    return YES;
 }
 
 
@@ -118,17 +104,17 @@ int main(int argc, const char * argv[]) {
         MTKView* metalView = nil;
         WindowDelegate* delegate = nil;
 
+        bool succes = initWorldInfo();
+        if(!succes)
+        {
+            return 1;
+        }
+
         NSWindow* window = createWindow(NSMakeRect(0, 0, 800, 600), &metalView, &delegate);
 
         Renderer renderer((void*)metalView);
-        char* path = "Settings/scene.json";
-        // load settings
-        if (!loadSceneText(path, worldInfo)) {
-            NSLog(@"No scene file found, using default");
-            initWorldInfo();
-            // Optionally save the default scene
-            saveSceneText(path, worldInfo);
-        }
+       
+        
         
         renderer.updateBuffersWorld(
             worldInfo.world,

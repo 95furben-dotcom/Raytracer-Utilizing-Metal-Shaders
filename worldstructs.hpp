@@ -16,6 +16,15 @@ struct Camera {
     float planeHeight;
     float planeWidth;
 
+    void UpdateData()
+    {
+        forward = simd_normalize(target - position);
+        right = simd_normalize(simd_cross(forward, up));
+        up = simd_normalize(simd_cross(right, forward));
+        planeHeight = 2 * NearClipPlane * tan(FieldOfView * 3.14159265f / 360.0f);
+        planeWidth = planeHeight * Aspect;
+    }
+
     Camera(simd_float3 pos = {0.0f, 0.0f, -10.0f},
            simd_float3 tgt = {0.0f, 0.0f, 1.0f},
            simd_float3 upVec = {0.0f, 1.0f, 0.0f},
