@@ -121,13 +121,13 @@ int main(int argc, const char * argv[]) {
         NSWindow* window = createWindow(NSMakeRect(0, 0, 800, 600), &metalView, &delegate);
 
         Renderer renderer((void*)metalView);
-
+        char* path = "Settings/scene.json";
         // load settings
-        if (!loadSceneText("scene.txt", worldInfo)) {
+        if (!loadSceneText(path, worldInfo)) {
             NSLog(@"No scene file found, using default");
             initWorldInfo();
             // Optionally save the default scene
-            saveSceneText("scene_default.txt", worldInfo);
+            saveSceneText(path, worldInfo);
         }
         
         renderer.updateBuffersWorld(
