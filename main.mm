@@ -109,6 +109,7 @@ int main(int argc, const char * argv[]) {
         {
             return 1;
         }
+        worldInfo.camera.UpdateData();
 
         NSWindow* window = createWindow(NSMakeRect(0, 0, 800, 600), &metalView, &delegate);
 
