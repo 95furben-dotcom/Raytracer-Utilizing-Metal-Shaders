@@ -47,7 +47,7 @@ fragment float4 fragment_main(
         if(!spheres[0].inited){
             return float4(1,1,0,1); // yellow error
         }
-        
+
     // Build a simple camera ray from UV and camera params
     float3 forward = (camera.forward);
     float3 right = (camera.right);
@@ -77,17 +77,30 @@ fragment float4 fragment_main(
 
     uint randomSeed = world.frameIndex;
 
-    float4 color;
+    int originSphereInt = -1;
     // RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres)
-    RayHit hit = RayTracer::raycastWorld(ray, world, spheres, color);
+    RayHit hit = RayTracer::raycastWorld(ray, world, spheres, originSphereInt);
+    
+    float4 originalColor = spheres[originSphereInt].baseColor;
 
     if (!hit.hit) {
         return float4(0.1); // close to black
     }
 
     // do one more bounce for some simple diffuse lighting
-    Ray bounceRay = RayTracer::createBounceRay(ray, hit, randomSeed);
-    return color;
+    constant float& texRough = spheres[originSphereInt].textureRoughness;
+    Ray bounceRay = RayTracer::createBounceRay(ray, hit, 0 , randomSeed);
+
+    int closestSphereInt;
+    RayHit hit2 = RayTracer::raycastWorld(bounceRay, world, spheres, closestSphereInt);
+    if(!hit2.hit){
+        return originalColor * 0.1;
+    }
+
+    float lightEmission = spheres[closestSphereInt].lightEmission;
+
+
+    return originalColor*lightEmission;
 
         
 }

@@ -56,14 +56,16 @@ namespace RayTracer {
 
     // Create a reflected (bounced) ray from an incoming ray and a hit record.
     // The returned ray origin is nudged along the normal by a small epsilon to avoid self-intersection.
-    inline Ray createBounceRay(Ray incoming, RayHit hit, thread uint &randomSeed) {
+    inline Ray createBounceRay(Ray incoming, RayHit hit, float textureRoughness, thread uint &randomSeed) {
         float3 normal = hit.normal;
         float3 randomDir = Random::RandomDirection(randomSeed);
+
         if (dot(randomDir, normal) < 0.0) {
             randomDir = -randomDir;
         }
-        float3 bounceDir = reflect(incoming.direction, normal);
-        float3 finalDir = normalize(mix(randomDir, bounceDir, 0.5));
+        // float3 bounceDir = reflect(incoming.direction, normal);
+        // float3 finalDir = normalize((bounceDir + randomDir) * 0.5f);
+        float3 finalDir = randomDir;
 
         Ray bounce;
         bounce.origin = hit.position+ normal * 1e-4;
@@ -71,9 +73,9 @@ namespace RayTracer {
         return bounce;
     }
 
-    inline RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres, thread float4& color) {
+    inline RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres, thread int& closestSphereOut) {
         RayHit closestHit = createNoHit();
-        float4 closestColor = float4(0);
+        uint closestSphereInt = -1;
         float closestDistance = 1e20;
 
         for (uint i = 0; i < world.sphereCount; i++) {
@@ -81,11 +83,16 @@ namespace RayTracer {
             if (hit.hit && hit.distance < closestDistance) {
                 closestDistance = hit.distance;
                 closestHit = hit;
-                closestColor = spheres[i].baseColor;
+                closestSphereInt = i;
             }
         }
-        color = closestColor;
+        closestSphereOut = closestSphereInt;
         return closestHit;
     }
 
+    inline float3 Trace(Ray ray, uint maxBounceCount, thread uint &seed){
+        for(uint i = 0; i<maxBounceCount; i++){
+            
+        }
+    }
 }

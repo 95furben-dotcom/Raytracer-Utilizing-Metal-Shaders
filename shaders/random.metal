@@ -6,7 +6,7 @@ namespace Random{
     seed ^= seed << 13;
     seed ^= seed >> 17;
     seed ^= seed << 5;
-    return float(seed) * (1.0 / 4294967296.0);
+    return float(seed) / 4294967296.0;
     }
 
     // Returns a random value in [0,1) based on the input seed
@@ -20,5 +20,14 @@ namespace Random{
         float y = RandomNormalDist(seed);
         float z = RandomNormalDist(seed);
         return normalize(float3(x,y,z));
+    }
+    inline float3 RandomHemesphereDirection(float3 normal, thread uint &seed){
+        float3 dir = RandomDirection(seed);
+        if(dot(normal, dir) < 0.0) {
+            return -dir;
+        }
+        
+        return dir;
+        
     }
 }
