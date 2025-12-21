@@ -11,6 +11,11 @@ struct RayHit {
     float distance;
     float3 position;
     float3 normal;
+
+    // material info
+    float lightEmission;
+    float textureRoughness;
+    float3 baseColor;
 };
 
 struct Camera {
@@ -29,22 +34,38 @@ struct Camera {
 };
 
 struct Sphere {
-    bool inited;
     float3 center;
     float radius;
 
     // material properties
     float lightEmission;
     float textureRoughness;
-    float4 baseColor;
+    float3 baseColor;
 };
 
-struct World {
-    bool inited;
+struct WorldInfo {
     uint sphereCount;
     uint frameIndex;
 };  
 
+struct World{
+    uint sphereCount;
+    uint frameIndex;
+
+    // set in fragmentshader
+    constant Sphere* spheres;
+    constant Camera* camera;
+
+    World(constant Sphere* s, 
+              constant Camera* c,
+              uint sc,
+              uint fi) {
+        spheres = s;
+        camera = c;
+        sphereCount = sc;
+        frameIndex = fi;
+    }
+};
 
 // Must match CPU Params layout in Renderer.mm
 struct Params {

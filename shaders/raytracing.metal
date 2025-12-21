@@ -4,6 +4,7 @@
 using namespace metal;
 
 namespace RayTracer {
+    constant int MAX_BOUNCES = 5;
     // Return an empty RayHit (no hit). Use a function because program-scope
     // non-pointer aggregates in MSL must not be mutable storage; returning
     // a value is safe and portable.
@@ -26,7 +27,9 @@ namespace RayTracer {
         return hit;
     }
 
-    inline RayHit intersectSphere(Ray ray, float3 center, float radius) {
+    inline RayHit intersectSphere(Ray ray, constant Sphere& sphere) {
+        float radius = sphere.radius;
+        float3 center = sphere.center;
         float3 oc = ray.origin - center;
         float a = dot(ray.direction, ray.direction);
         float b = 2.0 * dot(oc, ray.direction);
@@ -38,16 +41,27 @@ namespace RayTracer {
         float t1 = (-b + sqrtD) / (2.0 * a);
         const float EPS = 1e-4;
 
+        // set constant info
+        RayHit hit;
+        hit.hit = true;
+        hit.lightEmission = sphere.lightEmission;
+        hit.textureRoughness = sphere.textureRoughness;
+        hit.baseColor = sphere.baseColor;
+
         if (t0 > EPS) {
-            float3 hitPos = ray.origin + t0 * ray.direction;
-            float3 normal = normalize(hitPos - center);
-            return createRayHit(t0, hitPos, normal);
+            hit.distance = t0;
+            hit.position = ray.origin + t0 * ray.direction;
+            hit.normal = normalize(hit.position - center);
+            return hit;
         }
         if (t1 > EPS) {
-            float3 hitPos = ray.origin + t1 * ray.direction;
-            float3 normal = normalize(hitPos - center);
-            return createRayHit(t1, hitPos, normal);
+            hit.distance = t1;
+            hit.position = ray.origin + t1 * ray.direction;
+            hit.normal = normalize(hit.position - center);
+            return hit;
         }
+
+        
         
         return createNoHit();
     }
@@ -73,26 +87,40 @@ namespace RayTracer {
         return bounce;
     }
 
-    inline RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres, thread int& closestSphereOut) {
+    inline RayHit raycastWorld(Ray ray, World world) {
         RayHit closestHit = createNoHit();
-        uint closestSphereInt = -1;
         float closestDistance = 1e20;
 
         for (uint i = 0; i < world.sphereCount; i++) {
-            RayHit hit = intersectSphere(ray, spheres[i].center, spheres[i].radius);
+            constant Sphere& sphere = world.spheres[i];
+            RayHit hit = intersectSphere(ray, sphere);
             if (hit.hit && hit.distance < closestDistance) {
                 closestDistance = hit.distance;
                 closestHit = hit;
-                closestSphereInt = i;
             }
         }
-        closestSphereOut = closestSphereInt;
         return closestHit;
     }
 
-    inline float3 Trace(Ray ray, uint maxBounceCount, thread uint &seed){
-        for(uint i = 0; i<maxBounceCount; i++){
+    inline float3 Trace(Ray ray, World world, thread uint &seed){
+        float3 incomingLight = float3(0);
+        float3 rayColor = float3(1); // white
+
+        for(uint i = 0; i<MAX_BOUNCES; i++){
+            RayHit hit = raycastWorld(ray, world);
             
+            if(hit.hit){
+                ray.origin = hit.position;
+                ray.direction = Random::RandomHemesphereDirection(hit.normal, seed);
+                float3 emittedLight = hit.baseColor * hit.lightEmission;
+                incomingLight += emittedLight * rayColor;
+                rayColor *= hit.baseColor;
+
+            }
+            else{
+                break;
+            }
         }
+        return incomingLight;
     }
 }

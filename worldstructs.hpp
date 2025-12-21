@@ -49,7 +49,6 @@ struct Camera {
 };
 
 struct Sphere {
-    bool inited=false;
     simd_float3 center;
     float radius;
 
@@ -66,7 +65,6 @@ struct Sphere {
            float roughness = 0.5f,
            float emission = 0.0f)
     {
-        inited=true;
         center = c;
         radius = r;
         baseColor = color;
@@ -77,7 +75,6 @@ struct Sphere {
 };
 
 struct World {
-    bool inited=false;
     uint32_t sphereCount;
     uint32_t frameIndex;
 
@@ -85,7 +82,6 @@ struct World {
     
     World(uint32_t sphereCount,
         uint32_t frameIndex){
-            inited=true;
     this->sphereCount = sphereCount;
     this->frameIndex = frameIndex;
 }

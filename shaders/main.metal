@@ -34,20 +34,12 @@ vertex VertexOut vertex_main(
     return out;
 }
 
-
 fragment float4 fragment_main(
     VertexOut in [[stage_in]],
     constant Camera& camera [[buffer(0)]],
-    constant World &world [[buffer(1)]],
+    constant WorldInfo &inWorld [[buffer(1)]],
     constant Sphere *spheres [[buffer(2)]]
     ) {
-        if (!world.inited){
-            return float4(1,0,1,1); // magenta error
-        }
-        if(!spheres[0].inited){
-            return float4(1,1,0,1); // yellow error
-        }
-
     // Build a simple camera ray from UV and camera params
     float3 forward = (camera.forward);
     float3 right = (camera.right);
@@ -73,34 +65,46 @@ fragment float4 fragment_main(
         localDirection.z * forward
     );
 
+    // Fix: use &camera to get pointer, and use inWorld not world
+    World world = World(spheres, &camera, inWorld.sphereCount, inWorld.frameIndex);
+
     Ray ray = RayTracer::createRay(camera.position, direction);
 
     uint randomSeed = world.frameIndex;
 
-    int originSphereInt = -1;
-    // RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres)
-    RayHit hit = RayTracer::raycastWorld(ray, world, spheres, originSphereInt);
+    //float3 hitColor = RayTracer::Trace(ray, world,randomSeed);
+    RayHit hit = RayTracer::raycastWorld(ray, world);
+    if (hit.hit)
+        return 1;
+    else return 0;
+
+    //return float4(hitColor.x,hitColor.y, hitColor.z, 1);
+
+    }
+
+
+//     int originSphereInt = -1;
+//     // RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres)
+//     RayHit hit = RayTracer::raycastWorld(ray, world, spheres, originSphereInt);
     
-    float4 originalColor = spheres[originSphereInt].baseColor;
+//     float4 originalColor = spheres[originSphereInt].baseColor;
 
-    if (!hit.hit) {
-        return float4(0.1); // close to black
-    }
+//     if (!hit.hit) {
+//         return float4(0.1); // close to black
+//     }
 
-    // do one more bounce for some simple diffuse lighting
-    constant float& texRough = spheres[originSphereInt].textureRoughness;
-    Ray bounceRay = RayTracer::createBounceRay(ray, hit, 0 , randomSeed);
+//     // do one more bounce for some simple diffuse lighting
+//     constant float& texRough = spheres[originSphereInt].textureRoughness;
+//     Ray bounceRay = RayTracer::createBounceRay(ray, hit, 0 , randomSeed);
 
-    int closestSphereInt;
-    RayHit hit2 = RayTracer::raycastWorld(bounceRay, world, spheres, closestSphereInt);
-    if(!hit2.hit){
-        return originalColor * 0.1;
-    }
+//     int closestSphereInt;
+//     RayHit hit2 = RayTracer::raycastWorld(bounceRay, world, spheres, closestSphereInt);
+//     if(!hit2.hit){
+//         return originalColor * 0.1;
+//     }
 
-    float lightEmission = spheres[closestSphereInt].lightEmission;
+//     float lightEmission = spheres[closestSphereInt].lightEmission;
 
 
-    return originalColor*lightEmission;
-
-        
-}
+//     return originalColor*lightEmission;
+// }
