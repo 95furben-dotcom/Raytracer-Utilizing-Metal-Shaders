@@ -48,6 +48,16 @@ Params params;
     // ✅ Initialize params with drawable size
     CGSize dsize = view.drawableSize;
     [self mtkView:view drawableSizeWillChange:dsize];
+
+    self.paramsBuffer = [self.device newBufferWithLength:sizeof(Params)
+                                                 options:MTLResourceStorageModeShared];
+    self.cameraBuffer = [self.device newBufferWithLength:sizeof(Camera)
+                                                 options:MTLResourceStorageModeShared];
+    self.worldBuffer = [self.device newBufferWithLength:sizeof(World)
+                                                options:MTLResourceStorageModeShared];
+    self.sphereBuffer = [self.device newBufferWithLength:sizeof(Sphere) * 100
+                                                 options:MTLResourceStorageModeShared];
+
 }
 
 - (void)updateBuffersWorld:(World)world
@@ -56,22 +66,15 @@ Params params;
 {
     params.frameIndex += 1;
     // Update Params struct and recreate buffer
-    // compute an inscribed 16:9 region centered in the drawable
+    // compute an inscribed 16:10 region centered in the drawable
 
     // vertex params buffer
-    self.paramsBuffer = [self.device newBufferWithBytes:&params
-                                                 length:sizeof(Params)
-                                                options:MTLResourceStorageModeShared];
-    // fragment buffers
-    self.cameraBuffer = [self.device newBufferWithBytes:&camera
-                                                 length:sizeof(Camera)
-                                                options:MTLResourceStorageModeShared];
-    self.worldBuffer = [self.device newBufferWithBytes:&world
-                                                length:sizeof(World)
-                                               options:MTLResourceStorageModeShared];
-    self.sphereBuffer = [self.device newBufferWithBytes:spheres
-                                                 length:sizeof(Sphere) * world.sphereCount
-                                                options:MTLResourceStorageModeShared];
+    // update params 
+    
+    memcpy([self.paramsBuffer contents], &params, sizeof(Params));
+    memcpy([self.cameraBuffer contents], &camera, sizeof(Camera));
+    memcpy([self.worldBuffer contents], &world, sizeof(World));
+    memcpy([self.sphereBuffer contents], spheres, sizeof(Sphere) * world.sphereCount);
 
 }
 
@@ -107,7 +110,6 @@ Params params;
 {
     uint32_t width = (uint32_t)size.width;
     uint32_t height = (uint32_t)size.height;
-    // Update params to match the new drawable size so shaders render at full resolution
     float targetRatio = 16.0f / 10.0f;
     float currentRatio = (float)width / (float)height;
 
@@ -115,11 +117,9 @@ Params params;
     uint32_t insH = height;
 
     if (currentRatio > targetRatio) {
-        // drawable is wider than 16:9 -> inscribed width limited by height
         insH = height;
         insW = (uint32_t)(insH * targetRatio);
     } else {
-        // drawable is taller than 16:9 -> inscribed height limited by width
         insW = width;
         insH = (uint32_t)(insW / targetRatio);
     }
@@ -130,9 +130,16 @@ Params params;
     params.inscribedHeight = insH;
     params.offsetX = (width - insW) / 2;
     params.offsetY = (height - insH) / 2;
+    
+    // ✅ ADD THIS: Update the params buffer immediately
+    if (self.paramsBuffer) {
+        memcpy([self.paramsBuffer contents], &params, sizeof(Params));
+    }
 }
 
 - (void)drawInMTKView:(MTKView *)view {
+    // update drawsize
+
     id<MTLCommandBuffer> buffer = [self.commandQueue commandBuffer];
     MTLRenderPassDescriptor* passDesc = view.currentRenderPassDescriptor;
     if (!passDesc) return;
@@ -166,7 +173,7 @@ Params params;
 
 Renderer::Renderer(void* view) {
     RendererObjC* r = [[RendererObjC alloc] initWithView:(MTKView*)view];
-    objcRenderer = (__bridge_retained void*)r;
+    objcRenderer = (void*)r;
 }
 void Renderer::updateBuffersWorld(
     const World& world,
@@ -178,3 +185,4 @@ void Renderer::updateBuffersWorld(
                    camera:camera
                   spheres:(Sphere*)spheres];
 }
+

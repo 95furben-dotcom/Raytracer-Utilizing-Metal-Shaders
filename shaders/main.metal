@@ -1,8 +1,13 @@
+#ifdef __INTELLISENSE__
+#include "metal_shim.h"
+#else
 #include <metal_stdlib>
+using namespace metal;
+#endif
+
 #include "common.metal"
 #include "raytracing.metal"
 
-using namespace metal;
 
 vertex VertexOut vertex_main(
     uint vertexID [[vertex_id]],
@@ -40,6 +45,8 @@ fragment float4 fragment_main(
     constant WorldInfo &inWorld [[buffer(1)]],
     constant Sphere *spheres [[buffer(2)]]
     ) {
+
+    return float4(1);
     // Build a simple camera ray from UV and camera params
     float3 forward = (camera.forward);
     float3 right = (camera.right);
@@ -70,15 +77,16 @@ fragment float4 fragment_main(
 
     Ray ray = RayTracer::createRay(camera.position, direction);
 
-    uint randomSeed = world.frameIndex;
+    uint randomSeed = uint(in.position.x) + uint(in.position.y) * 8192u + inWorld.frameIndex * 1729u;
 
-    //float3 hitColor = RayTracer::Trace(ray, world,randomSeed);
-    RayHit hit = RayTracer::raycastWorld(ray, world);
-    if (hit.hit)
-        return 1;
-    else return 0;
 
-    //return float4(hitColor.x,hitColor.y, hitColor.z, 1);
+    // works 
+    // RayHit hit = RayTracer::raycastWorld(ray, world);
+    // if (hit.hit) return float4(hit.baseColor,1);
+    // else return 0.1;
+
+    float3 hitColor = RayTracer::DisplayBounceDirection(ray, world,randomSeed);
+    return float4(hitColor,0);
 
     }
 

@@ -8,14 +8,15 @@ def run(command : str, relativePath : str = "") -> None:
     result = subprocess.run(cmd,cwd=cwd,capture_output=True, text=True)
 
     if result.returncode != 0:
-        print(f"Command failed: {' '.join(cmd)}\ncwd={cwd}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
-        exit(result.returncode)
+        print("❌ Shader compile failed:")
+        exit(result.stderr)
     else:
-        # Show useful output when successful
-        if result.stdout.strip():
-            print(result.stdout)
-        else:
-            print(f"{relativePath.split('/')[-1]} compile success")
+        if result.stderr.strip():
+            print("⚠️ Warnings:")
+            print(result.stderr)
+        print("✅ Success")
+
+    return result.returncode
 
 
 # compile shaders
@@ -24,7 +25,15 @@ shderDir = "shaders/"
 shaders = ["common", "random","raytracing", "main"]
 for shader in shaders:
     print(f"Compiling shader: {shader}")
-    run(f"xcrun -sdk macosx metal -c {shader}.metal -o compiles/{shader}.air", shderDir)
+    run(
+    f"xcrun -sdk macosx metal "
+#    f"-Wall -Werror " # treat all warnings as errors
+    f"-std=metal3.0 "
+    f"-Winvalid-offsetof "
+    f"-c {shader}.metal -o compiles/{shader}.air",
+    shderDir
+)
+
 
 # link .air -> .metallib
 compilesDir = "shaders/compiles/"

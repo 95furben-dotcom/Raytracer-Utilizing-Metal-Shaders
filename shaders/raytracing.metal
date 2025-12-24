@@ -1,7 +1,14 @@
+#ifdef __INTELLISENSE__
+#include "metal_shim.h"
+#else
 #include <metal_stdlib>
+using namespace metal;
+#endif
+
+
 #include "common.metal"
 #include "random.metal"
-using namespace metal;
+
 
 namespace RayTracer {
     constant int MAX_BOUNCES = 5;
@@ -103,14 +110,14 @@ namespace RayTracer {
     }
 
     inline float3 Trace(Ray ray, World world, thread uint &seed){
-        float3 incomingLight = float3(0);
+        float3 incomingLight = float3(0.0);
         float3 rayColor = float3(1); // white
 
         for(uint i = 0; i<MAX_BOUNCES; i++){
             RayHit hit = raycastWorld(ray, world);
             
             if(hit.hit){
-                ray.origin = hit.position;
+                ray.origin = hit.position + hit.normal * 1e-4;
                 ray.direction = Random::RandomHemesphereDirection(hit.normal, seed);
                 float3 emittedLight = hit.baseColor * hit.lightEmission;
                 incomingLight += emittedLight * rayColor;
@@ -122,5 +129,40 @@ namespace RayTracer {
             }
         }
         return incomingLight;
+    }
+
+    inline float3 DisplayBounceDirection(Ray ray, World world, thread uint &seed){
+        float3 incomingLight = float3(0);
+        float3 rayColor = float3(1); // white
+
+        RayHit hit = raycastWorld(ray, world);
+        
+        if(hit.hit){
+            ray.origin = hit.position + hit.normal * 1e-4;
+            ray.direction = Random::RandomHemesphereDirection(hit.normal, seed);
+            float3 emittedLight = hit.baseColor * hit.lightEmission;
+            incomingLight += emittedLight * rayColor;
+            rayColor *= hit.baseColor;
+
+            // Test if RandomHemesphereDirection returns valid data
+                float3 randomDir = Random::RandomHemesphereDirection(hit.normal, seed);
+
+                // Check 1: Is it normalized? (length should be ~1.0)
+                float len = length(randomDir);
+                if (len < 0.9 || len > 1.1) {
+                    return float3(1, 0, 0);  // RED = not normalized
+                }
+
+                // Check 2: Is it in the correct hemisphere? (should face same side as normal)
+                float alignment = dot(randomDir, hit.normal);
+                if (alignment < 0.0) {
+                    return float3(1, 1, 0);  // YELLOW = wrong hemisphere
+                }
+
+                // Check 3: Visualize the direction
+                return (randomDir + 1.0) * 0.5;  // Should be colorful like your normal test
+        } 
+
+        return 0.1;
     }
 }

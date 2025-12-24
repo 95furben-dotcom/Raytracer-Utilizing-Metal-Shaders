@@ -1,5 +1,10 @@
+#ifdef __INTELLISENSE__
+#include "metal_shim.h"
+#else
 #include <metal_stdlib>
 using namespace metal;
+#endif
+
 
 namespace Random{
     inline float RandomFloat(thread uint &seed) {
@@ -28,6 +33,6 @@ namespace Random{
         }
         
         return dir;
-        
+
     }
 }

@@ -1,6 +1,11 @@
 #ifndef COMMON_METAL_INCLUDED
 #define COMMON_METAL_INCLUDED
 
+#ifdef __INTELLISENSE__
+#include "metal_shim.h"
+#endif
+
+
 struct Ray {
     float3 origin;
     float3 direction;

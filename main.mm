@@ -54,8 +54,7 @@ NSWindow* createWindow(CGRect frame, MTKView** outMetalView, WindowDelegate** ou
 
     return window;
 }
-
-void runEventLoop(NSApplication* app, MTKView* metalView, WindowDelegate* delegate) {
+void runEventLoop(NSApplication* app, MTKView* metalView, WindowDelegate* delegate, Renderer& renderer) {
     while (!delegate.isClosed) {
         NSEvent* event;
         while ((event = [app nextEventMatchingMask:NSEventMaskAny
@@ -65,21 +64,31 @@ void runEventLoop(NSApplication* app, MTKView* metalView, WindowDelegate* delega
             [app sendEvent:event];
         }
 
-        // display FPS (tick GameLogic::Timing and print once per second-ish)
+        // ✅ Timing
         GameLogic::Timing::Tick();
         float fps = GameLogic::Timing::FPS();
         uint32_t _frameForPrint = GameLogic::Timing::FrameIndex();
-        // if ((_frameForPrint % 60) == 0) {
+        if ((_frameForPrint % 60) == 0) {
             NSLog(@"FPS: %.2f", fps);
-        // }
+        }
+
+        worldInfo.camera.UpdateData();
+
+        renderer.updateBuffersWorld(
+            worldInfo.world,
+            worldInfo.camera,
+            worldInfo.spheres
+        );
 
         [metalView draw];
-        // [NSThread sleepForTimeInterval:1.0/60.0];
+        
+        // ✅ ADD THIS: Limit frame rate to ~60 FPS
+        [NSThread sleepForTimeInterval:1.0/60.0];
     }
 }
 
 bool initWorldInfo() {
-    char* path = "Settings/scene.json";
+    const char* path = "Settings/scene.json";
     // load settings
     if (!loadSceneText(path, worldInfo)) {
         NSLog(@"No scene file found, using default");
@@ -127,7 +136,7 @@ int main(int argc, const char * argv[]) {
 
         // init GameLogic::Timing
         GameLogic::Timing::Init();
-        runEventLoop(app, metalView, delegate);
+        runEventLoop(app, metalView, delegate, renderer);
     }
     return 0;
 }
