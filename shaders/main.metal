@@ -30,7 +30,7 @@ vertex VertexOut vertex_main(
     float px = float(params.offsetX) + u * float(params.inscribedWidth);
     float py = float(params.offsetY) + v * float(params.inscribedHeight);
 
-    float ndcX = (px / float(params.drawableWidth)) * 2.0 - 1.0;
+    float ndcX = (px / float(params.inscribedWidth)) * 2.0 - 1.0;
     float ndcY = (py / float(params.drawableHeight)) * 2.0 - 1.0;
 
     out.position = float4(ndcX, ndcY, 0.0, 1.0);
@@ -43,76 +43,49 @@ fragment float4 fragment_main(
     VertexOut in [[stage_in]],
     constant Camera& camera [[buffer(0)]],
     constant WorldInfo &inWorld [[buffer(1)]],
-    constant Sphere *spheres [[buffer(2)]]
-    ) {
-
-    return float4(1);
-    // Build a simple camera ray from UV and camera params
-    float3 forward = (camera.forward);
-    float3 right = (camera.right);
-    float3 up = (camera.up);
+    constant Chunk *chunks [[buffer(2)]]
+    ) 
+{
 
 
-    float2 posOnPlane = float2(
-        camera.planeWidth * (in.uv.x - 0.5),
-        camera.planeHeight * (0.5 - in.uv.y)
-    );
-
-    float3 localDirection = normalize(
-        float3(
-            posOnPlane.x,
-            posOnPlane.y,
-            camera.NearClipPlane
-        )
-    );
-
-    float3 direction = normalize(
-        localDirection.x * right +
-        localDirection.y * up +
-        localDirection.z * forward
-    );
+    float3 direction = camera.GetDirection(in.uv);
 
     // Fix: use &camera to get pointer, and use inWorld not world
-    World world = World(spheres, &camera, inWorld.sphereCount, inWorld.frameIndex);
+    World world;
+    world.chunks = chunks;           // just assign the pointer
+    world.chunkCount = inWorld.chunkCount;
 
     Ray ray = RayTracer::createRay(camera.position, direction);
 
-    uint randomSeed = uint(in.position.x) + uint(in.position.y) * 8192u + inWorld.frameIndex * 1729u;
+    uint tempseed = in.position.x + in.position.y * 6578;
+
+    uint randomSeed = uint(Random::RandomFloat(tempseed) * 1000);
+    // Chunk chunk;
+    // chunk.position = int3(0,0,0); // origin
+    // // Blocks are irrelevant for bounding box visualization
+    // for(int x=0; x<CHUNK_SIZE.x; x++)
+    //     for(int y=0; y<CHUNK_SIZE.y; y++)
+    //         for(int z=0; z<CHUNK_SIZE.z; z++){
+    //         int index = x + y*CHUNK_SIZE.x + z * CHUNK_SIZE.x* CHUNK_SIZE.y;
+    //         chunk.blocks[index] = 0; 
+    //     }
 
 
-    // works 
-    // RayHit hit = RayTracer::raycastWorld(ray, world);
-    // if (hit.hit) return float4(hit.baseColor,1);
+    // RayHit hit = RayTracer::raycastChunkBounds(ray, chunk);
+
+    // if(hit.hit){
+    //     float ligth = -0.02*(hit.distance-45);
+    //     int sum = (int)hit.position.x + (int)hit.position.y + (int)hit.position.z;
+    //     float3 color = (sum % 2 == 0) ? float3(1,0,0) : float3(0,0,1);
+    //     return  float4(ligth*color,0);
+    // }
     // else return 0.1;
 
-    float3 hitColor = RayTracer::DisplayBounceDirection(ray, world,randomSeed);
-    return float4(hitColor,0);
+    RayHit hit = RayTracer::raycastChunk(ray, chunks[0]);
 
+    if(hit.hit){
+        float ligth = -0.02*(hit.distance-45);
+        return  ligth;
     }
-
-
-//     int originSphereInt = -1;
-//     // RayHit raycastWorld(Ray ray, constant World &world, constant Sphere* spheres)
-//     RayHit hit = RayTracer::raycastWorld(ray, world, spheres, originSphereInt);
-    
-//     float4 originalColor = spheres[originSphereInt].baseColor;
-
-//     if (!hit.hit) {
-//         return float4(0.1); // close to black
-//     }
-
-//     // do one more bounce for some simple diffuse lighting
-//     constant float& texRough = spheres[originSphereInt].textureRoughness;
-//     Ray bounceRay = RayTracer::createBounceRay(ray, hit, 0 , randomSeed);
-
-//     int closestSphereInt;
-//     RayHit hit2 = RayTracer::raycastWorld(bounceRay, world, spheres, closestSphereInt);
-//     if(!hit2.hit){
-//         return originalColor * 0.1;
-//     }
-
-//     float lightEmission = spheres[closestSphereInt].lightEmission;
-
-
-//     return originalColor*lightEmission;
-// }
+    else return 0.1;
+}   

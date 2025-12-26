@@ -1,15 +1,12 @@
 #ifndef RENDERER_HPP
 #define RENDERER_HPP
 
-#include "../worldstructs.hpp"
+#include "../worldstructs.h"
 
 class Renderer {
 public:
     Renderer(void* view);
-    void updateBuffersWorld(
-                    const World& world,
-                    const Camera& camera,
-                    const Sphere* spheres);
+    void updateBuffersWorld(const World& world);
 
 private:
     void* objcRenderer; // RendererObjC*

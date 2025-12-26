@@ -3,6 +3,10 @@
 
 #ifdef __INTELLISENSE__
 #include "metal_shim.h"
+#pragma clang diagnostic ignored "-Wunknown-attributes"
+#else
+#include <metal_stdlib>
+using namespace metal;
 #endif
 
 
@@ -16,12 +20,8 @@ struct RayHit {
     float distance;
     float3 position;
     float3 normal;
-
-    // material info
-    float lightEmission;
-    float textureRoughness;
-    float3 baseColor;
 };
+
 
 struct Camera {
     float NearClipPlane;
@@ -36,41 +36,67 @@ struct Camera {
 
     float planeHeight;
     float planeWidth;
+
+    // For constant memory, explicitly add 'constant' for 'this'
+    float3 GetDirection(float2 uv) constant
+    {
+        float2 posOnPlane = float2(
+            planeWidth * (0.5f - uv.x),
+            planeHeight * (uv.y - 0.5f)
+        );
+
+        float3 localDirection = normalize(
+            float3(posOnPlane.x, posOnPlane.y, NearClipPlane)
+        );
+
+        return normalize(
+            localDirection.x * right +
+            localDirection.y * up +
+            localDirection.z * forward
+        );
+    }
+
+    float3 GetDirectionNonConst(float2 uv)
+    {
+        float2 posOnPlane = float2(
+            planeWidth * (0.5f - uv.x),
+            planeHeight * (uv.y - 0.5f)
+        );
+
+        float3 localDirection = normalize(
+            float3(posOnPlane.x, posOnPlane.y, NearClipPlane)
+        );
+
+        return normalize(
+            localDirection.x * right +
+            localDirection.y * up +
+            localDirection.z * forward
+        );
+    }
 };
 
-struct Sphere {
-    float3 center;
-    float radius;
 
-    // material properties
-    float lightEmission;
-    float textureRoughness;
-    float3 baseColor;
-};
 
 struct WorldInfo {
-    uint sphereCount;
+    uint chunkCount;
     uint frameIndex;
 };  
 
-struct World{
-    uint sphereCount;
-    uint frameIndex;
+constant int3 CHUNK_SIZE = int3(16);
 
-    // set in fragmentshader
-    constant Sphere* spheres;
-    constant Camera* camera;
-
-    World(constant Sphere* s, 
-              constant Camera* c,
-              uint sc,
-              uint fi) {
-        spheres = s;
-        camera = c;
-        sphereCount = sc;
-        frameIndex = fi;
-    }
+struct Chunk{
+    // static dimentions
+    
+    // chunk data
+    int3 position;
+    uint8_t blocks[16*16*16];
 };
+
+struct World {
+    constant Chunk* chunks;
+    uint chunkCount;
+};
+
 
 // Must match CPU Params layout in Renderer.mm
 struct Params {
@@ -84,7 +110,7 @@ struct Params {
 
 struct VertexOut {
     // global outputs
-    float4 position [[position]];
+    float4 position [[position]]; 
     float2 uv;
 };
 

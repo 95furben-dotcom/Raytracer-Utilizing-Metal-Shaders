@@ -3,7 +3,7 @@
 #include <simd/simd.h>
 #include "Renderer.hpp"
 #include "RendererStructs.hpp"
-#include "../worldstructs.hpp"
+#include "../worldstructs.h"
 
 
 // Use SIMD types for vectors (compatible with Metal shader types)
@@ -24,7 +24,8 @@ Params params;
 // fragment buffers
 @property(nonatomic, strong) id<MTLBuffer> cameraBuffer;
 @property(nonatomic, strong) id<MTLBuffer> worldBuffer;
-@property(nonatomic, strong) id<MTLBuffer> sphereBuffer;
+@property(nonatomic, strong) id<MTLBuffer> chunkBuffer;
+
 
 
 @end
@@ -36,18 +37,16 @@ Params params;
         [self setupDevice:view];
         [self setupPipeline:view];
         view.delegate = self;
+        [self mtkView:view drawableSizeWillChange:view.drawableSize];
     }
     return self;
 }
+
 
 - (void)setupDevice:(MTKView*)view {
     self.device = MTLCreateSystemDefaultDevice();
     view.device = self.device;
     self.commandQueue = [self.device newCommandQueue];
-    
-    // ✅ Initialize params with drawable size
-    CGSize dsize = view.drawableSize;
-    [self mtkView:view drawableSizeWillChange:dsize];
 
     self.paramsBuffer = [self.device newBufferWithLength:sizeof(Params)
                                                  options:MTLResourceStorageModeShared];
@@ -55,26 +54,22 @@ Params params;
                                                  options:MTLResourceStorageModeShared];
     self.worldBuffer = [self.device newBufferWithLength:sizeof(World)
                                                 options:MTLResourceStorageModeShared];
-    self.sphereBuffer = [self.device newBufferWithLength:sizeof(Sphere) * 100
+    self.chunkBuffer = [self.device newBufferWithLength:sizeof(Chunk) * World::MAX_CHUNKS
                                                  options:MTLResourceStorageModeShared];
 
 }
 
 - (void)updateBuffersWorld:(World)world
-                        camera:(Camera)camera
-                      spheres:(Sphere *)spheres
 {
-    params.frameIndex += 1;
-    // Update Params struct and recreate buffer
-    // compute an inscribed 16:10 region centered in the drawable
-
-    // vertex params buffer
-    // update params 
+    // if something is changed here, the perameters is not tied to main.mm
+    // CGSize dsize = view.drawableSize;
+    // [self mtkView:view drawableSizeWillChange:dsize];
     
+    // change data in memory
     memcpy([self.paramsBuffer contents], &params, sizeof(Params));
-    memcpy([self.cameraBuffer contents], &camera, sizeof(Camera));
+    memcpy([self.cameraBuffer contents], &world.camera, sizeof(Camera));
     memcpy([self.worldBuffer contents], &world, sizeof(World));
-    memcpy([self.sphereBuffer contents], spheres, sizeof(Sphere) * world.sphereCount);
+    memcpy([self.chunkBuffer contents],world.chunks, sizeof(Chunk) * world.worldinfo.chunkCount);
 
 }
 
@@ -108,8 +103,8 @@ Params params;
 - (void)mtkView:(MTKView *)view 
         drawableSizeWillChange:(CGSize)size 
 {
-    uint32_t width = (uint32_t)size.width;
-    uint32_t height = (uint32_t)size.height;
+    uint32_t width  = (uint32_t)(size.width);
+    uint32_t height = (uint32_t)(size.height);
     float targetRatio = 16.0f / 10.0f;
     float currentRatio = (float)width / (float)height;
 
@@ -123,6 +118,7 @@ Params params;
         insW = width;
         insH = (uint32_t)(insW / targetRatio);
     }
+
 
     params.drawableWidth = width;
     params.drawableHeight = height;
@@ -163,7 +159,7 @@ Params params;
 
     [encoder setFragmentBuffer:self.cameraBuffer offset:0 atIndex:0];
     [encoder setFragmentBuffer:self.worldBuffer offset:0 atIndex:1];
-    [encoder setFragmentBuffer:self.sphereBuffer offset:0 atIndex:2];
+    [encoder setFragmentBuffer:self.chunkBuffer offset:0 atIndex:2];
 
     
     [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
@@ -176,13 +172,9 @@ Renderer::Renderer(void* view) {
     objcRenderer = (void*)r;
 }
 void Renderer::updateBuffersWorld(
-    const World& world,
-    const Camera& camera,
-    const Sphere* spheres)
+    const World& world)
 {
     RendererObjC* r = (__bridge RendererObjC*)objcRenderer;
-    [r updateBuffersWorld:world
-                   camera:camera
-                  spheres:(Sphere*)spheres];
+    [r updateBuffersWorld:world];
 }
 

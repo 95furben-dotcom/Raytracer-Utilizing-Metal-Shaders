@@ -1,201 +1,280 @@
+#include "../worldstructs.h"
 #import <Foundation/Foundation.h>
-#include "../worldstructs.hpp"
+#include <simd/vector_types.h>
 
-// Helper to convert simd_float3 to NSArray
-static NSArray* float3ToArray(simd_float3 v) {
-    return @[@(v.x), @(v.y), @(v.z)];
-}
-
-// Helper to convert NSArray to simd_float3
-static simd_float3 arrayToFloat3(NSArray* arr) {
-    return simd_make_float3([arr[0] floatValue], [arr[1] floatValue], [arr[2] floatValue]);
-}
-
-// Helper to get full path in the app's directory
-static NSString* getFullPath(const char* filepath) {
-    NSString* filename = [NSString stringWithUTF8String:filepath];
-    
-    // If it's already an absolute path, use it
-    if ([filename hasPrefix:@"/"]) {
-        return filename;
+// helpers 
+    static NSArray* float3ToArray(simd_float3 v) {
+        return @[@(v.x), @(v.y), @(v.z)];
     }
+    static NSArray* int3ToArray(simd_int3 v) {
+        return @[@(v.x), @(v.y), @(v.z)];
+    }
+
+    // Helper to convert NSArray to simd_float3
+    static simd_float3 arrayToFloat3(NSArray* arr) {
+        return simd_make_float3([arr[0] floatValue], [arr[1] floatValue], [arr[2] floatValue]);
+    }
+    static simd_int3 arrayToInt3(NSArray* arr) {
+        return simd_make_int3([arr[0] intValue], [arr[1] intValue], [arr[2] intValue]);
+    }
+
+    NSDictionary* loadJSONDictionary(NSString* filePath, NSError** outError) {
+        NSData* data = [NSData dataWithContentsOfFile:filePath options:0 error:outError];
+        if (!data) {
+            NSLog(@"Failed to read file: %@, error: %@", filePath, *outError);
+            return nil;
+        }
+
+        id jsonObject = [NSJSONSerialization JSONObjectWithData:data
+                                                        options:NSJSONReadingMutableContainers
+                                                        error:outError];
+        if (!jsonObject) {
+            NSLog(@"Failed to parse JSON: %@, error: %@", filePath, *outError);
+            return nil;
+        }
+
+        if (![jsonObject isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"Expected a JSON dictionary at path: %@", filePath);
+            return nil;
+        }
+
+        return (NSDictionary*)jsonObject;
+    }
+
+    bool saveJSONDictionary(NSString* filePath, id jsonObject, NSError** outError) {
+        // Ensure it's a dictionary or array
+        if (![jsonObject isKindOfClass:[NSDictionary class]] &&
+            ![jsonObject isKindOfClass:[NSArray class]]) {
+            NSLog(@"saveJSONDictionary: Root object must be NSDictionary or NSArray");
+            return NO;
+        }
+
+        NSData* jsonData = [NSJSONSerialization dataWithJSONObject:jsonObject
+                                                        options:NSJSONWritingPrettyPrinted
+                                                            error:outError];
+        if (!jsonData) {
+            NSLog(@"Failed to serialize JSON: %@", *outError);
+            return NO;
+        }
+
+        BOOL success = [jsonData writeToFile:filePath options:NSDataWritingAtomic error:outError];
+        if (!success) {
+            NSLog(@"Failed to write JSON file %@: %@", filePath, *outError);
+            return NO;
+        }
+
+        return YES;
+    }
+    NSString* getFullPath(const char* filepath) {
+        NSString* path = [NSString stringWithUTF8String:filepath];
+
+        if ([path isAbsolutePath]) {
+            return path;
+        }
+
+        NSURL* baseURL = [[[NSBundle mainBundle] executableURL]
+                        URLByDeletingLastPathComponent];
+
+        NSURL* fullURL = [NSURL URLWithString:path relativeToURL:baseURL];
+        return fullURL.path;
+    }
+
+
+
+// For saving
+namespace Macros {
+
+
+#define TO_JSON_FIELD_FLOAT(obj, field) \
+    dict[@#field] = @(obj.field);
+
+#define TO_JSON_FIELD_FLOAT3(obj, field) \
+    dict[@#field] = float3ToArray(obj.field);
     
-    // Otherwise, put it in the executable's directory
-    NSString* execPath = [[NSBundle mainBundle] executablePath];
-    NSString* execDir = [execPath stringByDeletingLastPathComponent];
-    return [execDir stringByAppendingPathComponent:filename];
+#define TO_JSON_FIELD_INT3(obj, field) \
+    dict[@#field] = int3ToArray(obj.field);
+    
+
+// fields 
+#define CAMERA_FIELDS(X) \
+    X(NearClipPlane, float) \
+    X(Aspect, float) \
+    X(FieldOfView, float) \
+    X(position, simd_float3) \
+    X(target, simd_float3) \
+    X(up, simd_float3)
+
+#define CHUNK_FIELDS(X) \
+    X(position, simd_int3) \
+    X(blocks, uint32_t[16][20][16]) // You’d still need special handling for arrays
+
+
+// For saving to JSON
+#define TO_JSON_FIELD(obj, field, type) \
+    dict[@#field] = (type == simd_float3 ? float3ToArray(obj.field) : @(obj.field));
+
+// For loading from JSON
+#define FROM_JSON_FIELD(dict, obj, field, type) \
+    if (type == simd_float3) { obj.field = arrayToFloat3(dict[@#field]); } \
+    else { obj.field = [dict[@#field] floatValue]; }
+
+#define TO_JSON_FIELD_3DARRAY(obj, field, width, height, depth) \
+    { \
+        NSMutableArray* arrX = [NSMutableArray arrayWithCapacity:width]; \
+        for (int x = 0; x < width; x++) { \
+            NSMutableArray* arrY = [NSMutableArray arrayWithCapacity:height]; \
+            for (int y = 0; y < height; y++) { \
+                NSMutableArray* arrZ = [NSMutableArray arrayWithCapacity:depth]; \
+                for (int z = 0; z < depth; z++) { \
+                    [arrZ addObject:@(obj.field[x][y][z])]; \
+                } \
+                [arrY addObject:arrZ]; \
+            } \
+            [arrX addObject:arrY]; \
+        } \
+        dict[@#field] = arrX; \
+    }
+    // Load simd_int3
+    #define FROM_JSON_FIELD_INT3(dict, obj, field) \
+    { \
+        NSArray* arr = dict[@#field]; \
+        if (arr && arr.count == 3) { \
+            obj.field = simd_make_int3([arr[0] intValue], [arr[1] intValue], [arr[2] intValue]); \
+        } \
+    }
+
+// Load 3D uint32_t array
+    #define FROM_JSON_FIELD_3DARRAY(dict, obj, field, width, height, depth) \
+    { \
+        NSArray* arrX = dict[@#field]; \
+        if (!arrX || arrX.count != width) return false; \
+        for (NSUInteger x = 0; x < width; x++) { \
+            NSArray* arrY = arrX[x]; \
+            if (!arrY || arrY.count != height) continue; \
+            for (NSUInteger y = 0; y < height; y++) { \
+                NSArray* arrZ = arrY[y]; \
+                if (!arrZ || arrZ.count != depth) continue; \
+                for (NSUInteger z = 0; z < depth; z++) { \
+                    obj.field[x][y][z] = [arrZ[z] unsignedIntValue]; \
+                } \
+            } \
+        } \
+    }
+
+
 }
 
-// Save scene to JSON file
-bool saveSceneText(const char* filepath, const WorldInfo& worldInfo) {
-    NSMutableDictionary* scene = [NSMutableDictionary dictionary];
+// actual functions 
+NSDictionary* cameraToJSON(const Camera& cam) {
+    NSMutableDictionary* dict = [NSMutableDictionary dictionary];
+
+    TO_JSON_FIELD_FLOAT(cam, NearClipPlane)
+    TO_JSON_FIELD_FLOAT(cam, Aspect)
+    TO_JSON_FIELD_FLOAT(cam, fovRad)
+    TO_JSON_FIELD_FLOAT3(cam, position)
+    TO_JSON_FIELD_FLOAT3(cam, target)
+    TO_JSON_FIELD_FLOAT3(cam, up)
+
+    return dict;
+}
+
+bool cameraFromJSON(NSDictionary* dict, Camera& cam) {
+    cam.NearClipPlane = [dict[@"NearClipPlane"] floatValue];
+    cam.Aspect        = [dict[@"Aspect"] floatValue];
+    cam.fovRad   = [dict[@"fovRad"] floatValue];
+
+    cam.position = arrayToFloat3(dict[@"position"]);
+    cam.target   = arrayToFloat3(dict[@"target"]);
+    cam.up       = arrayToFloat3(dict[@"up"]);
+
+    return true;
+}
+
+// Save chunk in binary format
+void saveChunkBinary(NSString* worldFolder, Chunk chunk) {
+    NSString* fileName = [NSString stringWithFormat:@"chunks/%d_%d_%d.chunk", 
+                          chunk.position.x, chunk.position.y, chunk.position.z];
+    NSString* chunkPath = [worldFolder stringByAppendingPathComponent:fileName];
+
+    NSMutableData* data = [NSMutableData dataWithCapacity:sizeof(Chunk)];
     
-    // Camera
-    scene[@"camera"] = @{
-        @"position": float3ToArray(worldInfo.camera.position),
-        @"target": float3ToArray(worldInfo.camera.target),
-        @"up": float3ToArray(worldInfo.camera.up),
-        @"fov": @(worldInfo.camera.FieldOfView),
-        @"aspect": @(worldInfo.camera.Aspect),
-        @"nearclip": @(worldInfo.camera.NearClipPlane)
-    };
+    // Write position (12 bytes: 3 × int32)
+    [data appendBytes:&chunk.position length:sizeof(simd_int3)];
     
-    // World
-    scene[@"world"] = @{
-        @"sphereCount": @(worldInfo.world.sphereCount),
-        @"frameIndex": @(worldInfo.world.frameIndex)
-    };
+    // Write blocks (4096 bytes: 16×16×16 × uint8)
+    [data appendBytes:chunk.blocks length:Chunk::width * Chunk::height * Chunk::depth];
     
-    // Spheres
-    NSMutableArray* spheres = [NSMutableArray array];
-    for (uint32_t i = 0; i < worldInfo.world.sphereCount; i++) {
-        const Sphere& s = worldInfo.spheres[i];
-        [spheres addObject:@{
-            @"center": float3ToArray(s.center),
-            @"radius": @(s.radius),
-            @"color": float3ToArray(s.baseColor),
-            @"roughness": @(s.textureRoughness),
-            @"emission": @(s.lightEmission)
-        }];
-    }
-    scene[@"spheres"] = spheres;
-    
-    // Serialize to JSON
     NSError* error = nil;
-    NSData* jsonData = [NSJSONSerialization dataWithJSONObject:scene
-                                                       options:NSJSONWritingPrettyPrinted
-                                                         error:&error];
-    if (error) {
-        NSLog(@"Failed to serialize JSON: %@", error);
-        return false;
+    BOOL success = [data writeToFile:chunkPath options:NSDataWritingAtomic error:&error];
+    if (!success) {
+        NSLog(@"Failed to save chunk: %@", error);
     }
-    
-    // Write to file
-    NSString* path = getFullPath(filepath);
-    BOOL success = [jsonData writeToFile:path atomically:YES];
-    
-    if (success) {
-        NSLog(@"Scene saved to %@", path);
-    } else {
-        NSLog(@"Failed to write JSON file: %@", path);
-    }
-    
-    return success;
 }
 
-// Load scene from JSON file
-bool loadSceneText(const char* filepath, WorldInfo& worldInfo) {
-    NSString* path = getFullPath(filepath);
-    
-    // Read file
+// Load chunk from binary format
+bool loadChunkBinary(NSString* chunkPath, Chunk& chunk) {
     NSError* error = nil;
-    NSData* jsonData = [NSData dataWithContentsOfFile:path];
-    if (!jsonData) {
-        NSLog(@"Failed to read file: %@", path);
+    NSData* data = [NSData dataWithContentsOfFile:chunkPath options:0 error:&error];
+    
+    if (!data) {
         return false;
     }
     
-    // Parse JSON
-    NSDictionary* scene = [NSJSONSerialization JSONObjectWithData:jsonData
-                                                          options:0
-                                                            error:&error];
-    if (error) {
-        NSLog(@"Failed to parse JSON: %@", error);
+    // Verify size
+    NSUInteger expectedSize = sizeof(simd_int3) + (Chunk::width * Chunk::height * Chunk::depth);
+    if (data.length != expectedSize) {
+        NSLog(@"Chunk file corrupted: expected %lu bytes, got %lu", expectedSize, data.length);
         return false;
     }
     
-    // Load camera
-    NSDictionary* camDict = scene[@"camera"];
-    simd_float3 position = arrayToFloat3(camDict[@"position"]);
-    simd_float3 target = arrayToFloat3(camDict[@"target"]);
-    simd_float3 up = arrayToFloat3(camDict[@"up"]);
-    float fov = [camDict[@"fov"] floatValue];
-    float aspect = [camDict[@"aspect"] floatValue];
-    float nearclip = [camDict[@"nearclip"] floatValue];
+    const uint8_t* bytes = (const uint8_t*)[data bytes];
     
-    worldInfo.camera = Camera(position, target, up, fov, aspect, nearclip);
+    // Read position
+    memcpy(&chunk.position, bytes, sizeof(simd_int3));
+    bytes += sizeof(simd_int3);
     
-    // Load world
-    NSDictionary* worldDict = scene[@"world"];
-    uint32_t sphereCount = [worldDict[@"sphereCount"] unsignedIntValue];
-    uint32_t frameIndex = [worldDict[@"frameIndex"] unsignedIntValue];
-    worldInfo.world = World(sphereCount, frameIndex);
+    // Read blocks
+    memcpy(chunk.blocks, bytes, Chunk::width * Chunk::height * Chunk::depth);
     
-    // Load spheres
-    NSArray* spheresArray = scene[@"spheres"];
-    for (uint32_t i = 0; i < spheresArray.count && i < 100; i++) {
-        NSDictionary* sphereDict = spheresArray[i];
-        
-        simd_float3 center = arrayToFloat3(sphereDict[@"center"]);
-        float radius = [sphereDict[@"radius"] floatValue];
-        simd_float3 color = arrayToFloat3(sphereDict[@"color"]);
-        float roughness = [sphereDict[@"roughness"] floatValue];
-        float emission = [sphereDict[@"emission"] floatValue];
-        
-        worldInfo.spheres[i] = Sphere(center, radius, color, roughness, emission);
-    }
-    
-    NSLog(@"Scene loaded from %@ (%u spheres)", path, worldInfo.world.sphereCount);
     return true;
 }
 
-// Binary format - simple and fast (kept for compatibility)
-struct SceneFile {
-    Camera camera;
-    World world;
-    Sphere spheres[100];
-};
+// Updated loadAndAddChunk
+void loadAndAddChunk(NSString* worldFolder, simd_int3 pos, World& world) {
+    NSString* fileName = [NSString stringWithFormat:@"chunks/%d_%d_%d.chunk", pos.x, pos.y, pos.z];
+    NSString* chunkPath = [worldFolder stringByAppendingPathComponent:fileName];
 
-bool saveSceneBinary(const char* filepath, const WorldInfo& worldInfo) {
-    SceneFile scene;
-    scene.camera = worldInfo.camera;
-    scene.world = worldInfo.world;
+    Chunk loadedChunk;
     
-    for (uint32_t i = 0; i < worldInfo.world.sphereCount && i < 100; i++) {
-        scene.spheres[i] = worldInfo.spheres[i];
+    if (!loadChunkBinary(chunkPath, loadedChunk)) {
+        NSLog(@"Could not find chunk; generating new (%d,%d,%d)", pos.x, pos.y, pos.z);
+        loadedChunk = Chunk(pos);
+    }
+
+    int i = world.worldinfo.chunkCount;
+    world.chunks[i] = loadedChunk;
+    world.worldinfo.chunkCount += 1;
+}
+
+// Updated saveWorld
+bool saveWorld(World world, const char* worldPath) {
+    NSString* worldFolder = getFullPath(worldPath);
+
+    // Still save camera as JSON (it's small and useful to edit)
+    NSError* error = nil;
+    NSString* cameraPath = [worldFolder stringByAppendingPathComponent:@"camera.json"];
+    NSDictionary* dict = cameraToJSON(world.camera);
+    saveJSONDictionary(cameraPath, dict, &error);
+
+    // Save chunks in binary format
+    for (int i = 0; i < world.worldinfo.chunkCount; i++) {
+        saveChunkBinary(worldFolder, world.chunks[i]);
     }
     
-    FILE* f = fopen(filepath, "wb");
-    if (!f) {
-        NSLog(@"Failed to open file for writing: %s", filepath);
-        return false;
-    }
-    
-    size_t written = fwrite(&scene, sizeof(SceneFile), 1, f);
-    fclose(f);
-    
-    if (written != 1) {
-        NSLog(@"Failed to write scene file");
-        return false;
-    }
-    
-    NSLog(@"Scene saved to %s", filepath);
     return true;
 }
 
-bool loadSceneBinary(const char* filepath, WorldInfo& worldInfo) {
-    FILE* f = fopen(filepath, "rb");
-    if (!f) {
-        NSLog(@"Failed to open file for reading: %s", filepath);
-        return false;
-    }
-    
-    SceneFile scene;
-    size_t read = fread(&scene, sizeof(SceneFile), 1, f);
-    fclose(f);
-    
-    if (read != 1) {
-        NSLog(@"Failed to read scene file");
-        return false;
-    }
-    
-    worldInfo.camera = scene.camera;
-    worldInfo.world = scene.world;
-    
-    for (uint32_t i = 0; i < scene.world.sphereCount && i < 100; i++) {
-        worldInfo.spheres[i] = scene.spheres[i];
-    }
-    
-    NSLog(@"Scene loaded from %s (%u spheres)", filepath, scene.world.sphereCount);
-    return true;
-}
+
+
+
+

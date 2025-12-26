@@ -7,11 +7,18 @@ using namespace metal;
 
 
 namespace Random{
+    inline uint hash(uint x) {
+        x ^= x >> 16;
+        x *= 0x7feb352d;
+        x ^= x >> 15;
+        x *= 0x846ca68b;
+        x ^= x >> 16;
+        return x;
+    }
+
     inline float RandomFloat(thread uint &seed) {
-    seed ^= seed << 13;
-    seed ^= seed >> 17;
-    seed ^= seed << 5;
-    return float(seed) / 4294967296.0;
+        seed = hash(seed);
+        return float(seed) / 4294967295.0;
     }
 
     // Returns a random value in [0,1) based on the input seed

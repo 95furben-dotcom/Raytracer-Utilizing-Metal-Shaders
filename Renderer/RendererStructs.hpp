@@ -1,7 +1,6 @@
 #pragma once
 #include <simd/simd.h>
 #include <cstdint>
-#include "../worldstructs.hpp"
 
 struct Params {
     uint32_t drawableWidth;

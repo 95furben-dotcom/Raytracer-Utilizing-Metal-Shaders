@@ -1,8 +1,10 @@
 #import <Cocoa/Cocoa.h>
+#include <MacTypes.h>
+#include <Foundation/Foundation.h>
 #import <MetalKit/MetalKit.h>
 #include "Renderer/Renderer.hpp"
 #include "GameLogic/Timing.hpp"
-#include "worldstructs.hpp"
+#include "worldstructs.h"
 #include "Settings/SettingsLoader.hpp" // for WorldInfo
 
 // ---------------- WindowDelegate ----------------
@@ -17,7 +19,10 @@
 @end
 // ------------------------------------------------
 
-WorldInfo worldInfo; // global instance
+World world; // global instance
+const char* worldPath = "Settings/World";
+// Global scale factor
+
 
 
 NSWindow* createWindow(CGRect frame, MTKView** outMetalView, WindowDelegate** outDelegate) {
@@ -31,8 +36,16 @@ NSWindow* createWindow(CGRect frame, MTKView** outMetalView, WindowDelegate** ou
 
     // Metal view that fills the window content
     MTKView* metalView = [[MTKView alloc] initWithFrame:[window.contentView bounds]];
+
+    // metalView.enableSetNeedsDisplay = NO; // automatic redraw
+    // metalView.preferredFramesPerSecond = 0; // max FPS
+    //metalView.paused = NO; // continuous rendering
+    // res scale 
+
     metalView.autoresizingMask = (NSViewWidthSizable | NSViewHeightSizable);
-    metalView.drawableSize = metalView.frame.size;
+    metalView.drawableSize = CGSizeMake(metalView.frame.size.width,
+                                    metalView.frame.size.height);
+
     [window.contentView addSubview:metalView];
 
     // Window delegate
@@ -72,37 +85,44 @@ void runEventLoop(NSApplication* app, MTKView* metalView, WindowDelegate* delega
             NSLog(@"FPS: %.2f", fps);
         }
 
-        worldInfo.camera.UpdateData();
-
-        renderer.updateBuffersWorld(
-            worldInfo.world,
-            worldInfo.camera,
-            worldInfo.spheres
-        );
+        // world.worldinfo.frameIndex += 1;
+        // renderer.updateBuffersWorld(world);
 
         [metalView draw];
-        
-        // ✅ ADD THIS: Limit frame rate to ~60 FPS
-        [NSThread sleepForTimeInterval:1.0/60.0];
     }
+    
 }
 
 bool initWorldInfo() {
-    const char* path = "Settings/scene.json";
-    // load settings
-    if (!loadSceneText(path, worldInfo)) {
-        NSLog(@"No scene file found, using default");
-        bool defaultSceneLoadSucsess = loadSceneText("Settings/default_scene.json", worldInfo);
-        if(!defaultSceneLoadSucsess){
-            NSLog(@"failed to load default scene");
-            return NO;
-        }
-        // Optionally save the default scene
-        saveSceneText(path, worldInfo);
-    }
-    return YES;
-}
+    NSString* worldFolder = getFullPath(worldPath);
+    NSString* cameraPath = [worldFolder stringByAppendingPathComponent:@"camera.json"];
 
+    NSError* error = nil;
+    NSDictionary* dict = loadJSONDictionary(cameraPath, &error);
+    
+    // Check if dict exists BEFORE using it
+    if (!dict) {
+        NSLog(@"Camera file not found, initializing default camera");
+        world.camera = Camera();
+    } else {
+        bool success = cameraFromJSON(dict, world.camera);
+        if(!success){
+            NSLog(@"Failed to parse camera, using default");
+            world.camera = Camera();
+        }
+    }
+
+    // Ensure camera is behind the chunk and looking at it
+
+
+// Compute derived camera data
+world.camera.UpdateData();
+
+    
+    simd_int3 pos = {0,0,0};
+    loadAndAddChunk(worldFolder, pos, world);
+    return true;
+}
 
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
@@ -118,25 +138,18 @@ int main(int argc, const char * argv[]) {
         {
             return 1;
         }
-        worldInfo.camera.UpdateData();
 
         NSWindow* window = createWindow(NSMakeRect(0, 0, 800, 600), &metalView, &delegate);
 
         Renderer renderer((void*)metalView);
-       
-        
-        
-        renderer.updateBuffersWorld(
-            worldInfo.world,
-            worldInfo.camera,
-            worldInfo.spheres
-        );
-
+    
+        renderer.updateBuffersWorld(world);
 
 
         // init GameLogic::Timing
         GameLogic::Timing::Init();
         runEventLoop(app, metalView, delegate, renderer);
     }
+    saveWorld(world, worldPath);
     return 0;
 }

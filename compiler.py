@@ -1,6 +1,6 @@
 import subprocess
 
-rootPath = "/Users/benjaminflynnfurnes/Documents/CppProjects/MetalProjects/RayTracers/Raytracer_V6/"
+rootPath = "/Users/benjaminflynnfurnes/Documents/CppProjects/MetalProjects/RayTracers/Minecraft_1.1.1/"
 
 def run(command : str, relativePath : str = "") -> None:
     cmd = command.split(" ")
